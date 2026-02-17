@@ -91,11 +91,6 @@ def dfs(start, goal, grid_size):
 
         if node.state not in explored:
             explored.add(node.state)
-            
-            # Reverse order for stack to process strictly in order 1..6
-            # Standard DFS pushes neighbors so last pushed is first popped.
-            # If we want to expand "Up" first, "Up" should be at the top of stack.
-            # So we push in strict reverse order of successors.
             neighbors = get_successors(node.state, grid_size)
             for state, action, cost in reversed(neighbors):
                 if state not in explored:
@@ -123,9 +118,6 @@ def ucs(start, goal, grid_size):
                 if state not in explored:
                     new_cost = node.cost + cost
                     child = Node(state, node, action, new_cost, node.depth + 1)
-                    # Check if child is in frontier with higher cost - strictly, UCS adds duplicates to heap or updates. 
-                    # Heapq doesn't support update easily, so we can push. 
-                    # Lazy deletion handles duplicates.
                     heapq.heappush(frontier, child)
     return None
 
@@ -141,12 +133,11 @@ def recursive_dls(node, goal, grid_size, limit, path_states):
         return "cutoff"
     
     cutoff_occurred = False
-    
-    # Cycle checking for logic correctness in recursion path
+
     path_states.add(node.state)
     
     for state, action, cost in get_successors(node.state, grid_size):
-        # Prevent cycles in current path
+        
         if state not in path_states: 
             child = Node(state, node, action, node.cost + cost, node.depth + 1)
             result = recursive_dls(child, goal, grid_size, limit - 1, path_states)
@@ -156,7 +147,7 @@ def recursive_dls(node, goal, grid_size, limit, path_states):
             elif result is not None:
                 return result
                 
-    path_states.remove(node.state) # Backtrack
+    path_states.remove(node.state) 
     
     if cutoff_occurred:
         return "cutoff"
@@ -168,8 +159,7 @@ def iddfs(start, goal, grid_size, max_depth=1000):
         result = dls(start, goal, grid_size, depth)
         if result != "cutoff" and result is not None:
             return result
-        # If result is None (failure) and not cutoff, we might stop early? 
-        # But in infinite grid or complex graph, we typically just keep increasing depth.
+
     return None
 
 def bidirectional_search(start, goal, grid_size):
@@ -177,16 +167,13 @@ def bidirectional_search(start, goal, grid_size):
     if start == goal:
         return []
     
-    # Forward BFS
     f_frontier = deque([Node(start)])
     f_explored = {start: Node(start)}
     
-    # Backward BFS
     b_frontier = deque([Node(goal)])
     b_explored = {goal: Node(goal)}
     
     while f_frontier and b_frontier:
-        # Expand forward
         if f_frontier:
             node = f_frontier.popleft()
             for state, action, cost in get_successors(node.state, grid_size):
@@ -197,15 +184,11 @@ def bidirectional_search(start, goal, grid_size):
                     if state in b_explored:
                         return merge_paths(child, b_explored[state])
         
-        # Expand backward
         if b_frontier:
             node = b_frontier.popleft()
-            # For backward search, we need inverse actions if we want to reconstruct perfectly,
-            # or strictly just find connection.
-            # Successors are same in undirected grid.
             for state, action, cost in get_successors(node.state, grid_size):
                 if state not in b_explored:
-                    # Parent pointer goes towards Goal
+                    
                     child = Node(state, node, action, node.cost + cost) 
                     b_explored[state] = child
                     b_frontier.append(child)
@@ -215,28 +198,11 @@ def bidirectional_search(start, goal, grid_size):
     return None
 
 def merge_paths(f_node, b_node):
-    # f_node path: Start -> ... -> Meeting
-    # b_node path: Goal -> ... -> Meeting (parent points to Goal)
-    
     path_forward = reconstruct_path(f_node)
     
     path_backward = []
     curr = b_node
     while curr.parent:
-        # Actions in b_node are "how we got here from goal direction", 
-        # so if we moved "Up" from goal to get here, the path from start goes "Down"
-        # But we just need to reconstruct.
-        # Actually, let's keep it simple: just list actions.
-        # Wait, if b_node is (next_state -> current_state), action is stored in child.
-        # We need to reverse the actions for the second half?
-        # The prompt asks for algorithms.
-        # Let's simple return the list of nodes or standard actions if possible.
-        # With "Strict Movement Order", we just need to find the path.
-        
-        # We need to inverse action? 
-        # If we moved "Up" from Parent(Goal side) to Child(Meeting point),
-        # real path is Child -> Parent which is "Down".
-        
         action =  get_inverse_action(curr.action)
         path_backward.append(action)
         curr = curr.parent
@@ -253,3 +219,190 @@ def get_inverse_action(action):
         "Bottom-Right": "Top-Left"
     }
     return inverses.get(action, action)
+
+
+def bfs_step(start, goal, grid_size):
+    start_node = Node(start)
+    if start == goal:
+        yield {'type': 'path', 'path': [], 'explored': set(), 'frontier': []}
+        return
+    
+    frontier = deque([start_node])
+    explored = set()
+    explored.add(start)
+    
+    yield {'type': 'step', 'frontier': [n.state for n in frontier], 'explored': list(explored), 'current': start_node.state}
+    
+    while frontier:
+        node = frontier.popleft()
+        yield {'type': 'step', 'frontier': [n.state for n in frontier], 'explored': list(explored), 'current': node.state}
+        
+        for state, action, cost in get_successors(node.state, grid_size):
+            if state not in explored and state not in [n.state for n in frontier]:
+                child = Node(state, node, action, node.cost + cost, node.depth + 1)
+                #goal ko check karo generating ka doran!
+                if child.state == goal:
+                    yield {'type': 'path', 'path': reconstruct_path(child), 'explored': list(explored), 'frontier': [n.state for n in frontier]}
+                    return
+                
+                frontier.append(child)
+                explored.add(state) 
+    frontier = deque([start_node])
+    explored = set()
+    
+    while frontier:
+        node = frontier.popleft()
+        explored.add(node.state)
+        
+        yield {'type': 'step', 'frontier': [n.state for n in frontier], 'explored': list(explored), 'current': node.state}
+
+        for state, action, cost in get_successors(node.state, grid_size):
+            in_frontier = any(n.state == state for n in frontier)
+            if state not in explored and not in_frontier:
+                child = Node(state, node, action, node.cost + cost, node.depth + 1)
+                if child.state == goal:
+                    yield {'type': 'path', 'path': reconstruct_path(child), 'explored': list(explored), 'frontier': [n.state for n in frontier]}
+                    return
+                frontier.append(child)
+    yield {'type': 'path', 'path': None, 'explored': list(explored), 'frontier': []}
+
+def dfs_step(start, goal, grid_size):
+    start_node = Node(start)
+    frontier = [start_node]
+    explored = set()
+
+    yield {'type': 'step', 'frontier': [n.state for n in frontier], 'explored': list(explored), 'current': None}
+
+    while frontier:
+        node = frontier.pop()
+        
+        if node.state == goal:
+            yield {'type': 'path', 'path': reconstruct_path(node), 'explored': list(explored), 'frontier': [n.state for n in frontier]}
+            return
+
+        if node.state not in explored:
+            explored.add(node.state)
+            yield {'type': 'step', 'frontier': [n.state for n in frontier], 'explored': list(explored), 'current': node.state}
+            
+            neighbors = get_successors(node.state, grid_size)
+            for state, action, cost in reversed(neighbors):
+                if state not in explored:
+                     child = Node(state, node, action, node.cost + cost, node.depth + 1)
+                     frontier.append(child)
+    yield {'type': 'path', 'path': None, 'explored': list(explored), 'frontier': []}
+
+def ucs_step(start, goal, grid_size):
+    start_node = Node(start)
+    frontier = []
+    heapq.heappush(frontier, start_node)
+    explored = set()
+    
+    yield {'type': 'step', 'frontier': [n.state for n in frontier], 'explored': list(explored), 'current': None}
+    
+    while frontier:
+        node = heapq.heappop(frontier)
+        
+        if node.state == goal:
+            yield {'type': 'path', 'path': reconstruct_path(node), 'explored': list(explored), 'frontier': [n.state for n in frontier]}
+            return
+            
+        if node.state not in explored:
+            explored.add(node.state)
+            yield {'type': 'step', 'frontier': [n.state for n in frontier], 'explored': list(explored), 'current': node.state}
+            
+            for state, action, cost in get_successors(node.state, grid_size):
+                if state not in explored:
+                    new_cost = node.cost + cost
+                    child = Node(state, node, action, new_cost, node.depth + 1)
+                    heapq.heappush(frontier, child)
+    yield {'type': 'path', 'path': None, 'explored': list(explored), 'frontier': []}
+
+def dls_step(start, goal, grid_size, limit):
+    start_node = Node(start)
+    path_states = set()
+    stack = [(start_node, [start_node.state])]
+    
+    yield from recursive_dls_step(Node(start), goal, grid_size, limit, set())
+
+def recursive_dls_step(node, goal, grid_size, limit, path_states):
+    yield {'type': 'step', 'frontier': [], 'explored': list(path_states), 'current': node.state}
+    
+    if node.state == goal:
+        yield {'type': 'path', 'path': reconstruct_path(node)}
+        return True # Signal found
+    
+    if limit <= 0:
+        return False
+    
+    path_states.add(node.state)
+    
+    cutoff_occurred = False
+    
+    neighbors = get_successors(node.state, grid_size)
+
+    for state, action, cost in neighbors:
+        if state not in path_states:
+            child = Node(state, node, action, node.cost + cost, node.depth + 1)
+            gen = recursive_dls_step(child, goal, grid_size, limit - 1, path_states)
+            for event in gen:
+                yield event
+                if event['type'] == 'path':
+                    return True
+            
+    path_states.remove(node.state)
+    return False
+
+def iddfs_step(start, goal, grid_size, max_depth=1000):
+    for depth in range(max_depth):
+        yield {'type': 'log', 'message': f'Starting Depth {depth}'}
+        found = False
+        gen = dls_step(start, goal, grid_size, depth)
+        for event in gen:
+            yield event
+            if event['type'] == 'path':
+                return
+    yield {'type': 'path', 'path': None}
+
+def bidirectional_search_step(start, goal, grid_size):
+    if start == goal:
+        yield {'type': 'path', 'path': []}
+        return
+
+    f_frontier = deque([Node(start)])
+    f_explored = {start: Node(start)}
+    
+    b_frontier = deque([Node(goal)])
+    b_explored = {goal: Node(goal)}
+    
+    while f_frontier and b_frontier:
+        # Forward
+        if f_frontier:
+            node = f_frontier.popleft()
+            yield {'type': 'step', 'frontier': [n.state for n in f_frontier] + [n.state for n in b_frontier], 
+                   'explored': list(f_explored.keys()) + list(b_explored.keys()), 'current': node.state}
+            
+            for state, action, cost in get_successors(node.state, grid_size):
+                if state not in f_explored:
+                    child = Node(state, node, action, node.cost + cost)
+                    f_explored[state] = child
+                    f_frontier.append(child)
+                    if state in b_explored:
+                        path = merge_paths(child, b_explored[state])
+                        yield {'type': 'path', 'path': path}
+                        return
+
+        if b_frontier:
+            node = b_frontier.popleft()
+            yield {'type': 'step', 'frontier': [n.state for n in f_frontier] + [n.state for n in b_frontier], 
+                   'explored': list(f_explored.keys()) + list(b_explored.keys()), 'current': node.state}
+
+            for state, action, cost in get_successors(node.state, grid_size):
+                if state not in b_explored:
+                    child = Node(state, node, action, node.cost + cost)
+                    b_explored[state] = child
+                    b_frontier.append(child)
+                    if state in f_explored:
+                        path = merge_paths(f_explored[state], child)
+                        yield {'type': 'path', 'path': path}
+                        return
+    yield {'type': 'path', 'path': None}

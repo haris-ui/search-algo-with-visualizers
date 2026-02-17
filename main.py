@@ -9,8 +9,7 @@ def print_result(algorithm_name, path):
     print("-" * 30)
 
 def main():
-    # Grid settings
-    ROWS, COLS = 5, 5 # Small grid for demonstration/debugging
+    ROWS, COLS = 5, 5 
     start = (0, 0)
     goal = (4, 4)
     grid_size = (ROWS, COLS)
@@ -19,22 +18,22 @@ def main():
     print(f"Start: {start}, Goal: {goal}")
     print("=" * 40)
 
-    # 1. BFS
+    # BFS
     print_result("BFS", bfs(start, goal, grid_size))
 
-    # 2. DFS
+    # DFS
     print_result("DFS", dfs(start, goal, grid_size))
 
-    # 3. UCS
+    # UCS
     print_result("UCS", ucs(start, goal, grid_size))
 
-    # 4. DLS (limit=10)
+    # DLS
     print_result("DLS (limit=10)", dls(start, goal, grid_size, 10))
 
-    # 5. IDDFS
+    # IDDFS
     print_result("IDDFS", iddfs(start, goal, grid_size))
 
-    # 6. Bidirectional Search
+    # Bidirectional Search
     print_result("Bidirectional Search", bidirectional_search(start, goal, grid_size))
 
 if __name__ == "__main__":
